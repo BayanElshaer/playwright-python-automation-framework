@@ -1,0 +1,8 @@
+pytest
+playwright
+pytest-playwright
+requests
+pytest-html
+python-dotenv
+pandas
+numpy

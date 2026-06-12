@@ -1,82 +1,137 @@
-from playwright.sync_api import Page
+"""
+InventoryPage – encapsulates all interactions with /inventory.html.
+"""
+import logging
+from typing import List
 
-class Invetory:
-    def __init__(self, page : Page):
-        self.page = page
+from playwright.sync_api import Page, expect
 
-    def add_to_cart(self, item):
-        """
-        Add item to cart when click "Add to cart" button
-        """
-        add_btn = item.locator("button")
-        add_btn.click()
+from pages.base_page import BasePage
 
-    def remove_from_cart(self, item):
-        """
-        Remove item from cart after added
-        it when click on "Remove" button
-        """
-        remove_btn = item.locator("button")
-        remove_btn.click()
+logger = logging.getLogger(__name__)
 
-    def get_cart_badge_count(self, css_locator="[data-test='shopping-cart-badge']"):
-        """
-        Get the number of items that are added to cart.
-        """
-        badge_count = self.page.locator(css_locator)
-        return badge_count
 
-    def get_inventory_count(self):
-        """
-        Get the number of items in the inventory page.
-        """
-        inventory_count = self.page.locator(".inventory_item")
-        return inventory_count.count()
+class InventoryPage(BasePage):
+    """Page Object for the SauceDemo product listing page."""
 
-    def get_inventory_list(self):
-        """
-        REturn the list of items in the inventory page.
-        """
-        inventory_list = self.page.locator(".inventory_item")
-        return inventory_list
-    
-    def get_items_names(self, inventory_list):
-        """
-        Get items names from invetory page.
-        """
-        item_name_list = list()
-        count = inventory_list.count()
-        for i in range(count):
-            item = inventory_list.nth(i)
-            # Get item name
-            name = item.locator("[data-test='inventory-item-name']")
-            item_name_list.append(name.text_content().strip())
+    # ── Locators ───────────────────────────────────────────────────────────────
+    PAGE_TITLE = ".title"
+    PRODUCT_ITEMS = ".inventory_item"
+    PRODUCT_NAMES = ".inventory_item_name"
+    PRODUCT_PRICES = ".inventory_item_price"
+    PRODUCT_IMAGES = ".inventory_item_img img"
+    PRODUCT_DESCRIPTIONS = ".inventory_item_desc"
+    ADD_TO_CART_BUTTONS = "button[data-test^='add-to-cart']"
+    REMOVE_BUTTONS = "button[data-test^='remove']"
+    SORT_DROPDOWN = 'select[data-test="product-sort-container"]'
+    CART_BADGE = ".shopping_cart_badge"
+    CART_LINK = ".shopping_cart_link"
+    BURGER_MENU = "#react-burger-menu-btn"
+    LOGOUT_LINK = "#logout_sidebar_link"
 
-        print("Names\n", item_name_list)
-        return item_name_list
+    def __init__(self, page: Page) -> None:
+        super().__init__(page)
 
-    def get_item_prices(self, inventory_list):
-        """
-        Get items price.
-        """
-        item_price_list = list()
-        count = inventory_list.count()
-        for i in range(count):
-            item = inventory_list.nth(i)
-            # Get item price
-            price = item.locator("[data-test='inventory-item-price']")
-            price = float(price.text_content().strip().replace("$", ""))
-            item_price_list.append(price)
+    # ── Navigation ─────────────────────────────────────────────────────────────
+    def open(self) -> "InventoryPage":
+        self.navigate("/inventory.html")
+        return self
 
-        print("Prices\n", item_price_list)
-        return item_price_list
+    def go_to_cart(self) -> None:
+        logger.info("Navigating to cart")
+        self.page.click(self.CART_LINK)
 
-    def sort_items(self, sort_type):
-        """
-        choose sort type depending on what user choose
-        """
-        dropdown = self.page.locator(
-        "[data-test='product-sort-container']"
-        )
+    def logout(self) -> None:
+        logger.info("Logging out")
+        self.page.click(self.BURGER_MENU)
+        self.page.click(self.LOGOUT_LINK)
 
-        dropdown.select_option(label=sort_type)
+    # ── Actions ────────────────────────────────────────────────────────────────
+    def sort_by(self, option: str) -> "InventoryPage":
+        """Sort products using the visible inventory dropdown."""
+        logger.info("Sorting by: %s", option)
+        self.assert_url_contains("inventory")
+
+        dropdown = self.page.locator(self.SORT_DROPDOWN)
+        expect(dropdown).to_be_visible(timeout=15000)
+        dropdown.select_option(value=option)
+        expect(dropdown).to_have_value(option)
+        return self
+
+    def add_item_to_cart_by_name(self, product_name: str) -> "InventoryPage":
+        logger.info("Adding to cart: %s", product_name)
+        safe_name = product_name.lower().replace(" ", "-").replace("(", "").replace(")", "").replace(".", "").replace("'", "")
+        self.page.click(f"[data-test='add-to-cart-{safe_name}']")
+        return self
+
+    def remove_item_from_cart_by_name(self, product_name: str) -> "InventoryPage":
+        logger.info("Removing from cart: %s", product_name)
+        safe_name = product_name.lower().replace(" ", "-").replace("(", "").replace(")", "").replace(".", "").replace("'", "")
+        self.page.click(f"[data-test='remove-{safe_name}']")
+        return self
+
+    def add_all_items_to_cart(self) -> "InventoryPage":
+        logger.info("Adding all items to cart")
+        for btn in self.page.locator(self.ADD_TO_CART_BUTTONS).all():
+            btn.click()
+        return self
+
+    # ── Getters ────────────────────────────────────────────────────────────────
+    def get_product_names(self) -> List[str]:
+        return [el.inner_text() for el in self.page.locator(self.PRODUCT_NAMES).all()]
+
+    def get_product_prices(self) -> List[float]:
+        texts = [el.inner_text() for el in self.page.locator(self.PRODUCT_PRICES).all()]
+        return [float(t.replace("$", "")) for t in texts]
+
+    def get_cart_item_count(self) -> int:
+        badge = self.page.locator(self.CART_BADGE)
+        if badge.count() == 0:
+            return 0
+        return int(badge.inner_text())
+
+    def get_product_count(self) -> int:
+        return self.page.locator(self.PRODUCT_ITEMS).count()
+
+    # ── Assertions ─────────────────────────────────────────────────────────────
+    def assert_on_inventory_page(self) -> None:
+        self.assert_url_contains("inventory")
+        expect(self.page.locator(self.PAGE_TITLE)).to_have_text("Products")
+
+    def assert_product_count(self, expected: int) -> None:
+        logger.debug("Asserting product count == %d", expected)
+        expect(self.page.locator(self.PRODUCT_ITEMS)).to_have_count(expected)
+
+    def assert_cart_badge_count(self, expected: int) -> None:
+        logger.debug("Asserting cart badge == %d", expected)
+        if expected == 0:
+            expect(self.page.locator(self.CART_BADGE)).to_be_hidden()
+        else:
+            expect(self.page.locator(self.CART_BADGE)).to_have_text(str(expected))
+
+    def assert_products_sorted_az(self) -> None:
+        names = self.get_product_names()
+        assert names == sorted(names), f"Products not sorted A-Z: {names}"
+
+    def assert_products_sorted_za(self) -> None:
+        names = self.get_product_names()
+        assert names == sorted(names, reverse=True), f"Products not sorted Z-A: {names}"
+
+    def assert_products_sorted_price_low_high(self) -> None:
+        prices = self.get_product_prices()
+        assert prices == sorted(prices), f"Products not sorted price low-high: {prices}"
+
+    def assert_products_sorted_price_high_low(self) -> None:
+        prices = self.get_product_prices()
+        assert prices == sorted(prices, reverse=True), f"Products not sorted price high-low: {prices}"
+
+    def assert_all_products_have_image(self) -> None:
+        for img in self.page.locator(self.PRODUCT_IMAGES).all():
+            expect(img).to_be_visible()
+            src = img.get_attribute("src")
+            assert src and len(src) > 0, "Product image has no src"
+
+    def assert_all_products_have_price(self) -> None:
+        for price in self.page.locator(self.PRODUCT_PRICES).all():
+            text = price.inner_text()
+            assert text.startswith("$"), f"Unexpected price format: {text}"

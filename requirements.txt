@@ -1,8 +1,21 @@
-pytest
-playwright
-pytest-playwright
-requests
-pytest-html
-python-dotenv
-pandas
-numpy
+# Core test stack
+pytest>=8.0,<9
+playwright>=1.44,<2
+pytest-playwright>=0.5,<1
+requests>=2.32.0
+
+# Reporting
+allure-pytest>=2.13,<3
+
+# Parallel execution
+pytest-xdist>=3.5,<4
+
+# Timeouts
+pytest-timeout>=2.3,<3
+
+# Utilities
+python-dotenv>=1.0,<2
+
+# Development / linting (optional, not needed for CI)
+# ruff>=0.4
+# black>=24

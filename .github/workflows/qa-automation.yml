@@ -1,0 +1,149 @@
+name: QA Automation
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  qa-tests:
+    name: Playwright + Pytest + Allure CI
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      PYTHONUNBUFFERED: "1"
+      CI: "true"
+      HEADLESS: "true"
+      BROWSER: "chromium"
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+          cache-dependency-path: requirements.txt
+
+      - name: Install system dependencies for Playwright
+        # Ubuntu runners need the browser runtime libraries that Playwright relies on.
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libnss3 \
+            libnspr4 \
+            libatk1.0-0 \
+            libatk-bridge2.0-0 \
+            libcups2 \
+            libdrm2 \
+            libxkbcommon0 \
+            libxcomposite1 \
+            libxdamage1 \
+            libxfixes3 \
+            libxrandr2 \
+            libgbm1 \
+            libasound2t64 \
+            libpango-1.0-0 \
+            libcairo2 \
+            libatspi2.0-0 \
+            libxshmfence1 \
+            xvfb
+
+      - name: Install Python dependencies
+        # This matches the project requirements and keeps CI aligned with local execution.
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Install Playwright browsers
+        # Installs Chromium, Firefox, and WebKit plus their required OS dependencies.
+        run: |
+          playwright install --with-deps chromium firefox webkit
+
+      - name: Prepare output folders
+        run: |
+          mkdir -p reports/allure-results reports/allure-report reports/screenshots reports/videos logs
+
+      - name: Run pytest suite
+        id: pytest
+        # The suite writes Allure results automatically via pytest.ini.
+        run: |
+          pytest -n auto -v --maxfail=1 --alluredir=reports/allure-results
+        continue-on-error: true
+
+      - name: Generate Allure HTML report
+        if: always()
+        # Generate a readable HTML report even when tests fail, so artifacts are useful for debugging.
+        run: |
+          if [ -d "reports/allure-results" ] && [ "$(find reports/allure-results -mindepth 1 -maxdepth 1 | wc -l)" -gt 0 ]; then
+            npx -y allure-commandline generate reports/allure-results -o reports/allure-report --clean
+          else
+            echo "No Allure results were produced; skipping report generation."
+          fi
+
+      - name: Show test outcome summary
+        if: always()
+        run: |
+          echo "Pytest outcome: ${{ steps.pytest.outcome }}" >> "$GITHUB_STEP_SUMMARY"
+          echo "Allure report path: reports/allure-report" >> "$GITHUB_STEP_SUMMARY"
+          echo "Allure results path: reports/allure-results" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Fail workflow if tests failed
+        if: always()
+        run: |
+          if [ "${{ steps.pytest.outcome }}" != "success" ]; then
+            echo "Pytest failed. Check uploaded artifacts for results, screenshots, and logs."
+            exit 1
+          fi
+
+      - name: Upload Allure report artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: allure-report
+          path: reports/allure-report
+          if-no-files-found: warn
+          retention-days: 14
+
+      - name: Upload Allure results artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: allure-results
+          path: reports/allure-results
+          if-no-files-found: warn
+          retention-days: 14
+
+      - name: Upload screenshots artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: screenshots
+          path: reports/screenshots
+          if-no-files-found: warn
+          retention-days: 14
+
+      - name: Upload videos artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: videos
+          path: reports/videos
+          if-no-files-found: warn
+          retention-days: 14
+
+      - name: Upload logs artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: logs
+          path: logs
+          if-no-files-found: warn
+          retention-days: 14

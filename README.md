@@ -188,7 +188,7 @@ saucedemo-qa-framework/
 
 ### 1. Clone the repository
 ```bash
-git clone https://github.com/<YOUR_USERNAME>/playwright-python-automation-framework.git
+git clone https://github.com/BayanElshaer/playwright-python-automation-framework.git
 cd playwright-python-automation-framework
 ```
 
